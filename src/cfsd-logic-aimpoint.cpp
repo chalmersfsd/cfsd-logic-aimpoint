@@ -66,6 +66,13 @@ int32_t main(int32_t argc, char **argv) {
           std::string data = msg.data();
           uint32_t length = msg.length();
           Eigen::MatrixXf path(length, 2);
+
+          // If message is empty, do nothing
+          // TODO: Add logic here
+          if (msg.length() == 0) {
+            return;
+          }
+
           for (uint32_t i = 0; i < length; i++) {
             float x;
             float y;
@@ -85,22 +92,41 @@ int32_t main(int32_t argc, char **argv) {
             groundSpeedCopy = groundSpeed;
           }
 
-          float angle;
-          // TODO: calculate angle based on path...
+          // Calculate angle based on path
           float previewDistance = std::abs(groundSpeedCopy) * previewTime;
           float pathLength{0.0f};
 
+          // Follow path and stop when path is longer than preview distance
+          float xAimPoint, yAimPoint;
           for (int i = 0; i < path.rows()-1; i++) {
-            pathLength += (path.row(i) - path.row(i+1)).norm();
+            float pointDistance = (path.row(i) - path.row(i+1)).norm();
+
+            if (pathLength + pointDistance > previewDistance) {
+              float distanceToGo = previewDistance - pathLength;
+              float pointAngle = std::atan2(path(i+1,1) - path(i,1), path(i+1,0) - path(i,0));
+              xAimPoint = path(i,0) + distanceToGo * std::cos(pointAngle);
+              yAimPoint = path(i,1) + distanceToGo * std::sin(pointAngle);
+              return;
+            }
+
+            pathLength += pointDistance;
           }
 
-          if (verbose) {
-            std::cout << "Preview distance: " << previewDistance << "| Path Length: " << pathLength << std::endl;
+          // If the preview distance is longer than the whole path, use last point
+          if (previewDistance > pathLength) {
+            xAimPoint = path(path.rows()-1, 0);
+            yAimPoint = path(path.rows()-1, 1);
           }
 
           opendlv::logic::action::AimPoint aimPoint;
-          aimPoint.azimuthAngle(angle);
+          aimPoint.distance(std::sqrt(std::pow(xAimPoint, 2.0f) + std::pow(yAimPoint, 2.0f)));
+          aimPoint.azimuthAngle(std::atan2(yAimPoint, xAimPoint));
+          
           od4.send(aimPoint, cluon::time::now(), 2701);
+
+          if (verbose) {
+            std::cout << "Got path: " << path << std::endl;
+          }
         }
       }};
     od4.dataTrigger(opendlv::logic::action::LocalPath::ID(), onLocalPath);
