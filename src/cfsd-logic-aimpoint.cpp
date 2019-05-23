@@ -18,6 +18,8 @@
 #include <iostream>
 
 #include <Eigen/Core>
+#include <mutex>
+#include <cmath>
 
 #include "cluon-complete.hpp"
 #include "opendlv-standard-message-set.hpp"
@@ -25,7 +27,7 @@
 int32_t main(int32_t argc, char **argv) {
   int32_t retCode{0};
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
-  if (0 == commandlineArguments.count("cid")) {
+  if (0 == commandlineArguments.count("cid") || 0 == commandlineArguments.count("previewTime")) {
     std::cerr << argv[0] << "Generates the speed requests for Lynx" << std::endl;
     std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDaVINCI session> "
       << " [--verbose]" << std::endl;
@@ -33,9 +35,29 @@ int32_t main(int32_t argc, char **argv) {
     retCode = 1;
   } else {
     cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
+    float previewTime{static_cast<float>(std::stof(commandlineArguments["previewTime"]))};
     bool const verbose{static_cast<bool>(commandlineArguments.count("verbose"))};
 
-    auto onLocalPath{[&od4, &verbose](cluon::data::Envelope &&envelope)
+    std::mutex groundSpeedMutex;
+    float groundSpeed{0.0f};
+
+    auto onGroundSpeedReading{[&groundSpeedMutex, &groundSpeed, verbose](cluon::data::Envelope &&envelope) 
+      {
+        uint16_t senderStamp = envelope.senderStamp();
+        if (senderStamp == 0) {
+          auto gsr = cluon::extractMessage<opendlv::proxy::GroundSpeedReading>(std::move(envelope));
+
+          std::lock_guard<std::mutex> lock(groundSpeedMutex);
+          groundSpeed = gsr.groundSpeed();
+
+          if (verbose) {
+            std::cout << "GroundSpeedReading: " << groundSpeed << std::endl;
+          }
+        }
+      }};
+    od4.dataTrigger(opendlv::proxy::GroundSpeedReading::ID(), onGroundSpeedReading);
+
+    auto onLocalPath{[&od4, &groundSpeedMutex, &groundSpeed, &previewTime, verbose](cluon::data::Envelope &&envelope)
       {
         uint16_t senderStamp = envelope.senderStamp();
         if (senderStamp == 2601) {
@@ -56,8 +78,25 @@ int32_t main(int32_t argc, char **argv) {
             path(i,1) = y;
           }
 
+          // Copy groundSpeed
+          float groundSpeedCopy;
+          {
+            std::lock_guard<std::mutex> lock(groundSpeedMutex);
+            groundSpeedCopy = groundSpeed;
+          }
+
           float angle;
           // TODO: calculate angle based on path...
+          float previewDistance = std::abs(groundSpeedCopy) * previewTime;
+          float pathLength{0.0f};
+
+          for (int i = 0; i < path.rows()-1; i++) {
+            pathLength += (path.row(i) - path.row(i+1)).norm();
+          }
+
+          if (verbose) {
+            std::cout << "Preview distance: " << previewDistance << "| Path Length: " << pathLength << std::endl;
+          }
 
           opendlv::logic::action::AimPoint aimPoint;
           aimPoint.azimuthAngle(angle);

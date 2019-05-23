@@ -79,8 +79,8 @@ find_package(Threads REQUIRED)
 set(LIBRARIES Threads::Threads)
 
 find_package(Eigen3 REQUIRED)
-include_directories(SYSTEM ${Eigen3_INCLUDE_DIRS})
-message("HEJ " ${Eigen3_INCLUDE_DIRS})
+include_directories(SYSTEM ${EIGEN3_INCLUDE_DIRS})
+set(LIBRARIES ${LIBRARIES} Eigen3::Eigen)
 
 if(UNIX)
     if(NOT "${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
@@ -89,8 +89,6 @@ if(UNIX)
         include_directories(SYSTEM ${LIBRT_INCLUDE_DIR})
     endif()
 endif()
-
-set(LIBRARIES ${LIBRARIES} ${Eigen3_LIBS})
 
 ################################################################################
 # Create executable.
