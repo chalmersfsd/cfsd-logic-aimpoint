@@ -27,7 +27,8 @@
 int32_t main(int32_t argc, char **argv) {
   int32_t retCode{0};
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
-  if (0 == commandlineArguments.count("cid") || 0 == commandlineArguments.count("previewTime")) {
+  if (0 == commandlineArguments.count("cid") || 0 == commandlineArguments.count("previewTime")
+      || 0 == commandlineArguments.count("lowPassFactor")) {
     std::cerr << argv[0] << "Generates the speed requests for Lynx" << std::endl;
     std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDaVINCI session> "
       << " [--verbose]" << std::endl;
@@ -35,16 +36,19 @@ int32_t main(int32_t argc, char **argv) {
     retCode = 1;
   } else {
     cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
+    float lowPassFactor{static_cast<float>(std::stof(commandlineArguments["lowPassFactor"]))};
     float previewTime{static_cast<float>(std::stof(commandlineArguments["previewTime"]))};
     bool const verbose{static_cast<bool>(commandlineArguments.count("verbose"))};
 
     std::mutex groundSpeedMutex;
     float groundSpeed{0.0f};
+    float headingRequestOld;
+    float xAimPoint, yAimPoint;
 
     auto onGroundSpeedReading{[&groundSpeedMutex, &groundSpeed, verbose](cluon::data::Envelope &&envelope) 
       {
         uint16_t senderStamp = envelope.senderStamp();
-        if (senderStamp == 0) {
+        if (senderStamp == 112) {
           auto gsr = cluon::extractMessage<opendlv::proxy::GroundSpeedReading>(std::move(envelope));
 
           std::lock_guard<std::mutex> lock(groundSpeedMutex);
@@ -57,7 +61,7 @@ int32_t main(int32_t argc, char **argv) {
       }};
     od4.dataTrigger(opendlv::proxy::GroundSpeedReading::ID(), onGroundSpeedReading);
 
-    auto onLocalPath{[&od4, &groundSpeedMutex, &groundSpeed, &previewTime, verbose](cluon::data::Envelope &&envelope)
+    auto onLocalPath{[&](cluon::data::Envelope &&envelope)
       {
         uint16_t senderStamp = envelope.senderStamp();
         if (senderStamp == 2601) {
@@ -65,67 +69,71 @@ int32_t main(int32_t argc, char **argv) {
 
           std::string data = msg.data();
           uint32_t length = msg.length();
-          Eigen::MatrixXf path(length, 2);
 
-          // If message is empty, do nothing
-          // TODO: Add logic here
-          if (msg.length() == 0) {
-            return;
-          }
-
-          for (uint32_t i = 0; i < length; i++) {
-            float x;
-            float y;
-
-            memcpy(&x, data.c_str() + (3 * i + 0) * 4, 4);
-            memcpy(&y, data.c_str() + (3 * i + 1) * 4, 4);
-            // z not parsed, since not used
-
-            path(i,0) = x;
-            path(i,1) = y;
-          }
-
-          // Copy groundSpeed
-          float groundSpeedCopy;
+          // If message is empty, use previous value
+          // TODO: Add logic for the case of msg length == 0
+          if (msg.length() != 0)
           {
-            std::lock_guard<std::mutex> lock(groundSpeedMutex);
-            groundSpeedCopy = groundSpeed;
-          }
+            Eigen::MatrixXf path(length, 2);
+            for (uint32_t i = 0; i < length; i++)
+            {
+              float x;
+              float y;
 
-          // Calculate angle based on path
-          float previewDistance = std::abs(groundSpeedCopy) * previewTime;
-          float pathLength{0.0f};
+              memcpy(&x, data.c_str() + (3 * i + 0) * 4, 4);
+              memcpy(&y, data.c_str() + (3 * i + 1) * 4, 4);
+              // z not parsed, since not used
 
-          // Follow path and stop when path is longer than preview distance
-          float xAimPoint, yAimPoint;
-          for (int i = 0; i < path.rows()-1; i++) {
-            float pointDistance = (path.row(i) - path.row(i+1)).norm();
-
-            if (pathLength + pointDistance > previewDistance) {
-              float distanceToGo = previewDistance - pathLength;
-              float pointAngle = std::atan2(path(i+1,1) - path(i,1), path(i+1,0) - path(i,0));
-              xAimPoint = path(i,0) + distanceToGo * std::cos(pointAngle);
-              yAimPoint = path(i,1) + distanceToGo * std::sin(pointAngle);
-              return;
+              path(i, 0) = x;
+              path(i, 1) = y;
             }
 
-            pathLength += pointDistance;
+            // Copy groundSpeed
+            float groundSpeedCopy;
+            {
+              std::lock_guard<std::mutex> lock(groundSpeedMutex);
+              groundSpeedCopy = groundSpeed;
+            }
+
+            // Calculate angle based on path
+            float previewDistance = std::abs(groundSpeedCopy) * previewTime;
+            float pathLength{0.0f};
+
+            
+            // Select last point if the preview distance is larger than the path length
+            xAimPoint = path(path.rows() - 1, 0);
+            yAimPoint = path(path.rows() - 1, 1);
+
+            // Follow path and stop when path is longer than preview distance
+            for (int i = 0; i < path.rows() - 1; i++)
+            {
+              float pointDistance = (path.row(i) - path.row(i + 1)).norm();
+
+              if (pathLength + pointDistance > previewDistance)
+              {
+                float distanceToGo = previewDistance - pathLength;
+                float pointAngle = std::atan2(path(i + 1, 1) - path(i, 1), path(i + 1, 0) - path(i, 0));
+                xAimPoint = path(i, 0) + distanceToGo * std::cos(pointAngle);
+                yAimPoint = path(i, 1) + distanceToGo * std::sin(pointAngle);
+                break;
+              }
+
+              pathLength += pointDistance;
+            }
           }
 
-          // If the preview distance is longer than the whole path, use last point
-          if (previewDistance > pathLength) {
-            xAimPoint = path(path.rows()-1, 0);
-            yAimPoint = path(path.rows()-1, 1);
-          }
+          float headingRequest = std::atan2(yAimPoint, xAimPoint);
+          headingRequest = headingRequest * lowPassFactor + headingRequestOld * (1.0f - lowPassFactor);
 
           opendlv::logic::action::AimPoint aimPoint;
           aimPoint.distance(std::sqrt(std::pow(xAimPoint, 2.0f) + std::pow(yAimPoint, 2.0f)));
-          aimPoint.azimuthAngle(std::atan2(yAimPoint, xAimPoint));
-          
+          aimPoint.azimuthAngle();
           od4.send(aimPoint, cluon::time::now(), 2701);
 
+          headingRequestOld = headingRequest;
+
           if (verbose) {
-            std::cout << "Got path: " << path << std::endl;
+            std::cout << "Aim point distance: " << aimPoint.distance() << "| angle: " << aimPoint.azimuthAngle() << std::endl;
           }
         }
       }};
