@@ -125,13 +125,11 @@ int32_t main(int32_t argc, char **argv) {
           float headingRequest = std::atan2(yAimPoint, xAimPoint);
           headingRequest = headingRequest * lowPassFactor + headingRequestOld * (1.0f - lowPassFactor);
 
-          if (std::isnan(headingRequest)) {
-            headingRequest = headingRequestOld;
-          }
 
           float aimPointDistance = std::sqrt(std::pow(xAimPoint, 2.0f) + std::pow(yAimPoint, 2.0f));
 
-          if (std::isnan(aimPointDistance)) {
+          if (std::isnormal(headingRequest) || std::isnormal(aimPointDistance)) {
+            headingRequest = headingRequestOld;
             aimPointDistance = 0.0f;
           }
 
