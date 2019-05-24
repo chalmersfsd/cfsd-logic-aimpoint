@@ -30,8 +30,8 @@ int32_t main(int32_t argc, char **argv) {
   if (0 == commandlineArguments.count("cid") || 0 == commandlineArguments.count("previewTime")
       || 0 == commandlineArguments.count("lowPassFactor")) {
     std::cerr << argv[0] << "Generates the speed requests for Lynx" << std::endl;
-    std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDaVINCI session> "
-      << " [--verbose]" << std::endl;
+    std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDaVINCI session> --previewTime=<Aim point preview Time>"
+      << " --lowPassFactor=<Low pass filter factor for angle> [--verbose]" << std::endl;
     std::cerr << "Example: " << argv[0] << "--cid=111 [--verbose]" << std::endl;
     retCode = 1;
   } else {
@@ -125,8 +125,18 @@ int32_t main(int32_t argc, char **argv) {
           float headingRequest = std::atan2(yAimPoint, xAimPoint);
           headingRequest = headingRequest * lowPassFactor + headingRequestOld * (1.0f - lowPassFactor);
 
+          if (std::isnan(headingRequest)) {
+            headingRequest = headingRequestOld;
+          }
+
+          float aimPointDistance = std::sqrt(std::pow(xAimPoint, 2.0f) + std::pow(yAimPoint, 2.0f));
+
+          if (std::isnan(aimPointDistance)) {
+            aimPointDistance = 0.0f;
+          }
+
           opendlv::logic::action::AimPoint aimPoint;
-          aimPoint.distance(std::sqrt(std::pow(xAimPoint, 2.0f) + std::pow(yAimPoint, 2.0f)));
+          aimPoint.distance(aimPointDistance);
           aimPoint.azimuthAngle(headingRequest);
           od4.send(aimPoint, cluon::time::now(), 2701);
 
