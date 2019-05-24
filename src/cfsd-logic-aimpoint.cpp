@@ -127,8 +127,12 @@ int32_t main(int32_t argc, char **argv) {
 
           opendlv::logic::action::AimPoint aimPoint;
           aimPoint.distance(std::sqrt(std::pow(xAimPoint, 2.0f) + std::pow(yAimPoint, 2.0f)));
-          aimPoint.azimuthAngle();
+          aimPoint.azimuthAngle(headingRequest);
           od4.send(aimPoint, cluon::time::now(), 2701);
+
+          opendlv::proxy::GroundSteeringRequest gsr;
+          gsr.groundSteering(headingRequest);
+          od4.send(gsr, cluon::time::now(), 2801);
 
           headingRequestOld = headingRequest;
 
