@@ -128,7 +128,7 @@ int32_t main(int32_t argc, char **argv) {
 
           float aimPointDistance = std::sqrt(std::pow(xAimPoint, 2.0f) + std::pow(yAimPoint, 2.0f));
 
-          if (std::isnormal(headingRequest) || std::isnormal(aimPointDistance)) {
+          if (!std::isnormal(headingRequest) || !std::isnormal(aimPointDistance)) {
             headingRequest = headingRequestOld;
             aimPointDistance = 0.0f;
           }
