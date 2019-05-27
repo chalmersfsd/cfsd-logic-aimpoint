@@ -139,7 +139,7 @@ int32_t main(int32_t argc, char **argv) {
           od4.send(aimPoint, cluon::time::now(), 2701);
 
           opendlv::proxy::GroundSteeringRequest gsr;
-          gsr.groundSteering(headingRequest);
+          gsr.groundSteering(headingRequest * 180.0f / M_PI); // Convert radians to degrees for steering service
           od4.send(gsr, cluon::time::now(), 2801);
 
           headingRequestOld = headingRequest;
