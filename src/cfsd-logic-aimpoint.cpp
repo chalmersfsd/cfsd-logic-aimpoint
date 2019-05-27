@@ -124,7 +124,7 @@ int32_t main(int32_t argc, char **argv) {
             }
           }
 
-          float headingRequest = std::atan2(yAimPoint, xAimPoint);
+          float headingRequest = std::atan2(yAimPoint, xAimPoint) - PI_F / 2.0f; // Offset 90 degrees to the local coordinate system
           headingRequest = headingRequest * lowPassFactor + headingRequestOld * (1.0f - lowPassFactor);
 
 
