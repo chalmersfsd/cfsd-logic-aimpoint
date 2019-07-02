@@ -30,16 +30,19 @@ int32_t main(int32_t argc, char **argv) {
   int32_t retCode{0};
   auto commandlineArguments = cluon::getCommandlineArguments(argc, argv);
   if (0 == commandlineArguments.count("cid") || 0 == commandlineArguments.count("previewTime")
-      || 0 == commandlineArguments.count("lowPassFactor")) {
+      || 0 == commandlineArguments.count("lowPassFactor")
+      || 0 == commandlineArguments.count("minDistance")) {
     std::cerr << argv[0] << "Generates the speed requests for Lynx" << std::endl;
     std::cerr << "Usage:   " << argv[0] << " --cid=<OpenDaVINCI session> --previewTime=<Aim point preview Time>"
-      << " --lowPassFactor=<Low pass filter factor for angle> [--verbose]" << std::endl;
-    std::cerr << "Example: " << argv[0] << "--cid=111 [--verbose]" << std::endl;
+      << " --lowPassFactor=<Low pass filter factor for angle> --minDistance=<Minimum aim point distance> "
+      << "[--verbose]" << std::endl;
+    std::cerr << "Example: " << argv[0] << "--cid=111 --previewTime=0.5 --lowPassFactor=0.95 --minDistance=2 [--verbose]" << std::endl;
     retCode = 1;
   } else {
     cluon::OD4Session od4{static_cast<uint16_t>(std::stoi(commandlineArguments["cid"]))};
     float lowPassFactor{static_cast<float>(std::stof(commandlineArguments["lowPassFactor"]))};
     float previewTime{static_cast<float>(std::stof(commandlineArguments["previewTime"]))};
+    float minDistance{static_cast<float>(std::stof(commandlineArguments["minDistance"]))};
     bool const verbose{static_cast<bool>(commandlineArguments.count("verbose"))};
 
     std::mutex groundSpeedMutex;
@@ -99,6 +102,8 @@ int32_t main(int32_t argc, char **argv) {
 
             // Calculate angle based on path
             float previewDistance = std::abs(groundSpeedCopy) * previewTime;
+            if (previewDistance < minDistance) previewDistance = minDistance;
+
             float pathLength{0.0f};
 
             
@@ -140,6 +145,7 @@ int32_t main(int32_t argc, char **argv) {
           aimPoint.azimuthAngle(headingRequest);
           od4.send(aimPoint, cluon::time::now(), 2701);
 
+          headingRequest -= PI_F / 2.0f; // Offset 90 degrees to the local coordinate system
           opendlv::proxy::GroundSteeringRequest gsr;
           gsr.groundSteering(headingRequest * 180.0f / PI_F); // Convert radians to degrees for steering service
           od4.send(gsr, cluon::time::now(), 2801);

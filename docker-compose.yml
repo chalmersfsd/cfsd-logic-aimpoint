@@ -4,4 +4,4 @@ services:
   cfsd-logic-aimpoint:
     image: chalmersfsd/cfsd-logic-aimpoint:v0.0.1
     network_mode: "host"
-    command: "cfsd-logic-aimpoint --cid=219 --previewTime=0.5"
+    command: "cfsd-logic-aimpoint --cid=219 --previewTime=0.5 --lowPassFactor=0.95 --minDistance=2"
