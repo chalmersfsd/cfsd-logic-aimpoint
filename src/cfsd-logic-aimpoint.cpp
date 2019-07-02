@@ -145,12 +145,13 @@ int32_t main(int32_t argc, char **argv) {
           aimPoint.azimuthAngle(headingRequest);
           od4.send(aimPoint, cluon::time::now(), 2701);
 
-          headingRequest -= PI_F / 2.0f; // Offset 90 degrees to the local coordinate system
+          headingRequestOld = headingRequest;
+
+          float steeringRequest = headingRequest - PI_F / 2.0f; // Offset 90 degrees to steering coordinate system
           opendlv::proxy::GroundSteeringRequest gsr;
-          gsr.groundSteering(headingRequest * 180.0f / PI_F); // Convert radians to degrees for steering service
+          gsr.groundSteering(steeringRequest * 180.0f / PI_F); // Convert radians to degrees for steering service
           od4.send(gsr, cluon::time::now(), 2801);
 
-          headingRequestOld = headingRequest;
 
           if (verbose) {
             std::cout << "Aim point distance: " << aimPoint.distance() << "| angle: " << aimPoint.azimuthAngle() << std::endl;
