@@ -46,43 +46,14 @@ int32_t main(int32_t argc, char **argv) {
     bool const verbose{static_cast<bool>(commandlineArguments.count("verbose"))};
 
     std::mutex groundSpeedMutex;
-    //float groundSpeed{0.0f};
-    float wheelSpeedLeft{0.0f};
-    float wheelSpeedRight{0.0f};
+    float groundSpeed{0.0f};
     float headingRequestOld;
     float xAimPoint, yAimPoint;
 
-    // Wheelspeed reading changed name to axleAngularVelocityReading in this message set
-    auto onWheelSpeedReading{[&wheelSpeedLeft, &wheelSpeedRight, &groundSpeedMutex, verbose](cluon::data::Envelope &&envelope)
-        {
-          uint16_t senderStamp = envelope.senderStamp();
-          if (senderStamp == 1904) {
-            auto wheelSpeedReading = cluon::extractMessage<opendlv::proxy::AxleAngularVelocityReading>(std::move(envelope));
-            {
-              std::lock_guard<std::mutex> lock(groundSpeedMutex);
-              wheelSpeedLeft = wheelSpeedReading.axleAngularVelocity();
-            }
-            if (verbose) {
-              std::cout << "[ACTION-MOTION] FL wheel speed reading: " << wheelSpeedReading.axleAngularVelocity() << std::endl;
-            }
-          } else if (senderStamp == 1903) {
-            auto wheelSpeedReading = cluon::extractMessage<opendlv::proxy::AxleAngularVelocityReading>(std::move(envelope));
-            {
-              std::lock_guard<std::mutex> lock(groundSpeedMutex);
-              wheelSpeedRight = wheelSpeedReading.axleAngularVelocity();
-            }
-            if (verbose) {
-              std::cout << "[ACTION-MOTION] FR wheel speed reading: " << wheelSpeedReading.axleAngularVelocity() << std::endl;
-            }
-          }
-        }};
-    od4.dataTrigger(opendlv::proxy::AxleAngularVelocityReading::ID(), onWheelSpeedReading);
-
-    /*
     auto onGroundSpeedReading{[&groundSpeedMutex, &groundSpeed, verbose](cluon::data::Envelope &&envelope) 
       {
         uint16_t senderStamp = envelope.senderStamp();
-        if (senderStamp == 112) {
+        if (senderStamp == 3000) {
           auto gsr = cluon::extractMessage<opendlv::proxy::GroundSpeedReading>(std::move(envelope));
 
           std::lock_guard<std::mutex> lock(groundSpeedMutex);
@@ -94,7 +65,6 @@ int32_t main(int32_t argc, char **argv) {
         }
       }};
     od4.dataTrigger(opendlv::proxy::GroundSpeedReading::ID(), onGroundSpeedReading);
-    */
 
     auto onLocalPath{[&](cluon::data::Envelope &&envelope)
       {
@@ -127,7 +97,7 @@ int32_t main(int32_t argc, char **argv) {
             float groundSpeedCopy;
             {
               std::lock_guard<std::mutex> lock(groundSpeedMutex);
-              groundSpeedCopy = (wheelSpeedLeft + wheelSpeedRight) * 0.5f;
+              groundSpeedCopy = groundSpeed;
             }
 
             // Calculate angle based on path
